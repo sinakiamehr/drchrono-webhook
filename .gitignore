@@ -3,6 +3,7 @@
 # Ignore environment variable files
 .env
 .env.*
+!.env.example
 
 # Ignore Python cache and compiled files
 __pycache__/
