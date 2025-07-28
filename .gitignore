@@ -1,0 +1,22 @@
+# .gitignore
+
+# Ignore environment variable files
+.env
+.env.*
+
+# Ignore Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore temporary files
+*.tmp
+*.log
+
+# Ignore matched PDFs (if not needed in repo)
+matched_pdfs/
