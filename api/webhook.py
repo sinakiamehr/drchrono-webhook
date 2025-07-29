@@ -71,7 +71,10 @@ def verify_drchrono_signature(request, secret):
     Verifies the HMAC SHA256 signature of the request body using the shared secret.
     Assumes DrChrono sends the signature in the 'X-Drchrono-Signature' header.
     """
-    signature = request.headers.get("X-Drchrono-Signature")
+    # Add this at the start of verify_drchrono_signature function
+    if not DRCHRONO_WEBHOOK_SECRET:
+        raise ValueError("WEBHOOK_SECRET environment variable not set")
+    signature = request["headers"].get("X-Drchrono-Signature")
     if not signature:
         print("❌ No signature header found.")
         return False
@@ -111,7 +114,7 @@ def handler(event, context=None):
         return {"statusCode":405,"body":"Only POST allowed"}
 
     # Verify DrChrono webhook signature
-    if not verify_drchrono_signature({"headers": headers, "body": body, "json": request_json}, WEBHOOK_SECRET):
+    if not verify_drchrono_signature({"headers": headers, "body": body, "json": request_json}, DRCHRONO_WEBHOOK_SECRET):
         return {"statusCode": 401, "body": json.dumps({"error": "Invalid signature"})}
 
     data = request_json
