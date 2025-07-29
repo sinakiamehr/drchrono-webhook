@@ -49,7 +49,7 @@ def handler(request):
     # DrChrono and provider config
     DRCHRONO_API_BASE = os.environ.get("DRCHRONO_API_BASE", "https://drchrono.com/api/")
     DRCHRONO_ACCESS_TOKEN = os.environ.get("DRCHRONO_ACCESS_TOKEN")
-    PROVIDER_STRING = os.environ.get("PROVIDER_STRING", "Dr. Michael Stone")
+    PROVIDER_STRING = os.environ.get("PROVIDER_STRING", "Provider: Dr. Michael Stone")
 
     # S3 config
     S3_BUCKET = os.environ.get("S3_BUCKET", "clinical-registry-bucket")
