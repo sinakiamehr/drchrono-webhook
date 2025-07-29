@@ -1,12 +1,13 @@
-# app.py
+# local_webhook.py
 
-from flask import Flask, request, jsonify
+from flask import Flask, request
 from webhook_handler import process_webhook
 
 app = Flask(__name__)
 
 @app.route("/api/webhook", methods=["GET", "POST"])
 def webhook():
+    # For GET, pass the query string for verification
     event = {
         "httpMethod": request.method,
         "headers": dict(request.headers),
@@ -25,4 +26,4 @@ def webhook():
     return (result["body"], result["statusCode"], {"Content-Type": "application/json"})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000, debug=True)
+    app.run()
