@@ -1,57 +1,98 @@
-# DrChrono Webhook PDF Uploader
+# DrChrono Webhook Handler
 
-A secure, serverless webhook handler that automatically receives clinical note notifications from DrChrono, validates provider identity, and uploads matching PDFs to a protected S3 bucket.
+This application handles webhooks from DrChrono's EHR system, processes clinical notes, and stores relevant PDFs in AWS S3.
 
-## Overview
+## Files
 
-This repository contains a minimal, production-ready Vercel serverless function that acts as a webhook endpoint for DrChrono’s “clinical note locked” event. When triggered, the function:
+### app.py
+- Flask application serving as the webhook endpoint
+- Routes `/api/webhook` for DrChrono webhook events
+- Handles both GET (verification) and POST (webhook events)
+- Processes requests and passes them to `webhook_handler.py`
+- Returns appropriate responses with correct content types
 
-- Fetches the clinical note metadata and PDF from DrChrono.
-- Checks the PDF’s first page for a specified provider identification string.
-- Uploads matching PDFs directly to a private folder in your AWS S3 bucket.
+### webhook_handler.py
+- Contains core business logic for processing webhooks
+- Functions:
+  - `verify_signature`: Validates DrChrono webhook signatures
+  - `refresh_token`: Handles OAuth token refresh for DrChrono API
+  - `fetch_note`: Retrieves clinical note details from DrChrono API
+  - `provider_in_pdf`: Checks if a provider's name appears in a PDF
+  - `upload_pdf`: Stores PDFs in AWS S3 bucket
+  - `process_webhook`: Main entry point that orchestrates the workflow
 
-All sensitive credentials are managed via environment variables, and the AWS IAM user is configured with the least-privilege permissions to ensure maximum security.
+### requirements.txt
+- Lists Python dependencies:
+  - Flask (web framework)
+  - requests (HTTP client)
+  - boto3 (AWS SDK)
+  - PyPDF2 (PDF processing)
+  - python-dotenv (environment variables)
+  - gunicorn (production WSGI server)
 
-## Relationship to Clinical Registry Automation
+## Environment Variables
+Required `.env` variables:
+- `DRCHRONO_WEBHOOK_SECRET`: Webhook verification secret
+- `DRCHRONO_CLIENT_ID`, `DRCHRONO_CLIENT_SECRET`: OAuth credentials
+- `DRCHRONO_ACCESS_TOKEN`, `DRCHRONO_REFRESH_TOKEN`: API tokens
+- `PROVIDER_STRING`: Provider name to match in PDFs
+- AWS credentials (`MY_AWS_ACCESS_KEY_ID`, `MY_AWS_SECRET_ACCESS_KEY`)
+- `S3_BUCKET`: Target bucket for PDF storage
 
-This webhook service is designed as a secure, cloud-native intake point for the broader CRA project. By capturing and storing relevant clinical note PDFs in real time, it provides a reliable data source for downstream automation, structured data extraction workflows managed in the main project.
+## Deployment on Render
+1. Connect your GitHub repository to Render
+2. Set all required environment variables
+3. Specify `gunicorn app:app` as the start command
+4. The webhook URL will be `https://your-service.onrender.com/api/webhook`
 
 ## Project Structure
 
 ```
 drchrono-webhook/
-├── api/
-│   └── webhook.py           # Vercel serverless function for webhook handling
-├── requirements.txt         # Python dependencies
-├── vercel.json              # Vercel configuration (Python runtime)
-├── .env.example             # Template for environment variables
-└── .gitignore               # Git ignore rules
+├── .env.example       # Template for environment variables
+├── .gitignore        # Git ignore rules
+├── LICENSE           # Proprietary license
+├── README.md         # Project documentation
+├── app.py            # Flask web application
+├── requirements.txt  # Python dependencies
+└── webhook_handler.py # Core business logic
 ```
-
-## Setup & Deployment
-
-1. **AWS Setup**:  
-   - Create an S3 bucket (e.g., `s3bucket`).
-   - Add a folder (prefix) `s3bucket/webhook-folder`.
-   - Create an IAM user with only `s3:PutObject` permission for `s3bucket/webhook-folder/*.pdf`.
-
-2. **Environment Variables**:  
-   Copy `.env.example` to `.env` and fill in your credentials.  
-   Set these same variables in your Vercel project dashboard for production.
-
-3. **Deploy to Vercel**:  
-   - Push this repo to GitHub/GitLab/Bitbucket.
-   - Import as a new project on [Vercel](https://vercel.com/).
-   - Deploy and obtain your public endpoint URL.
-
-4. **Configure DrChrono Webhook**:  
-   - Register your Vercel endpoint URL in DrChrono’s developer dashboard for the “clinical note locked” webhook event.
 
 ## Security
 
-- All files are uploaded to a private S3 bucket folder.
-- Vercel’s IAM user can only upload (not view or delete) PDFs.
-- No sensitive credentials are committed to the repository.
+- All files are uploaded to a private S3 bucket folder
+- IAM user has only `s3:PutObject` permission for the target folder
+- No sensitive credentials are committed to the repository
+- Webhook requests are verified using HMAC signatures
+
+## Setup & Deployment
+
+### AWS Setup
+
+1. Create an S3 bucket (e.g., `s3bucket`)
+2. Add a folder (prefix) `s3bucket/webhook-folder`
+3. Create an IAM user with only `s3:PutObject` permission for `s3bucket/webhook-folder/*.pdf`
+
+### Environment Variables
+
+1. Copy `.env.example` to `.env` and fill in your credentials
+2. Set these same variables in your Render project dashboard
+
+## Webhook Flow
+1. DrChrono sends POST request with signed payload
+2. App verifies signature using shared secret
+3. For clinical note events:
+   - Fetches note details from DrChrono API
+   - Downloads associated PDF
+   - Checks if provider name appears in PDF
+   - If match found, uploads to S3
+4. Returns JSON response with status
+
+## Verification
+
+DrChrono requires GET verification with `msg` parameter:
+- Returns HMAC-SHA256 of msg using webhook secret
+- Required for initial webhook setup
 
 ## License
 

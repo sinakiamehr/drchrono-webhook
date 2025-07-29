@@ -1,4 +1,15 @@
-# webhook_handler.py
+"""
+DrChrono Webhook Handler
+
+This module contains the core business logic for processing DrChrono webhooks:
+- Verifies webhook signatures
+- Handles OAuth token refresh
+- Fetches clinical note details
+- Processes PDFs from DrChrono
+- Uploads matching PDFs to AWS S3
+
+All sensitive operations use environment variables for configuration.
+"""
 
 import os
 import requests
@@ -10,9 +21,21 @@ from io import BytesIO
 import json
 from dotenv import load_dotenv
 
+# Load environment variables from .env file
 load_dotenv()
 
 def verify_signature(headers, body, secret):
+    """
+    Verify the HMAC signature of a DrChrono webhook request.
+    
+    Args:
+        headers: Dictionary of request headers
+        body: Raw request body bytes
+        secret: Webhook secret from environment variables
+        
+    Returns:
+        bool: True if signature is valid, False otherwise
+    """
     signature = headers.get("X-Drchrono-Signature")
     if not signature or not secret:
         return False
@@ -20,6 +43,18 @@ def verify_signature(headers, body, secret):
     return hmac.compare_digest(computed, signature)
 
 def refresh_token():
+    """
+    Refresh the DrChrono OAuth access token using the refresh token.
+    
+    Makes a POST request to DrChrono's token endpoint to get a new access token.
+    Updates the environment variable with the new token.
+    
+    Returns:
+        str: New access token
+    
+    Raises:
+        requests.exceptions.HTTPError: If the token refresh fails
+    """
     resp = requests.post(
         "https://drchrono.com/o/token/",
         data={
@@ -36,24 +71,63 @@ def refresh_token():
     return new_token
 
 def fetch_note(note_id, token):
+    """
+    Fetch clinical note details from DrChrono API.
+    
+    Args:
+        note_id: ID of the clinical note to fetch
+        token: DrChrono OAuth access token
+        
+    Returns:
+        dict: Clinical note details in JSON format
+        
+    Raises:
+        requests.exceptions.HTTPError: If the API request fails
+    """
     url = f"https://drchrono.com/api/clinical_notes/{note_id}"
     headers = {"Authorization": f"Bearer {token}"}
     resp = requests.get(url, headers=headers, timeout=30)
+    
+    # Handle token expiration by refreshing and retrying
     if resp.status_code == 401:
         token = refresh_token()
         headers = {"Authorization": f"Bearer {token}"}
         resp = requests.get(url, headers=headers, timeout=30)
+    
     resp.raise_for_status()
     return resp.json()
 
 def provider_in_pdf(pdf_bytes, provider):
+    """
+    Check if a provider's name appears in the first page of a PDF.
+    
+    Args:
+        pdf_bytes: Raw PDF content as bytes
+        provider: Provider name string to search for
+        
+    Returns:
+        bool: True if provider name found in PDF, False otherwise
+    """
     reader = PdfReader(BytesIO(pdf_bytes))
     if not reader.pages:
         return False
+    
+    # Extract text from first page and check for provider name
     text = reader.pages[0].extract_text() or ""
     return provider in text
 
 def upload_pdf(pdf_bytes, bucket, key):
+    """
+    Upload a PDF file to AWS S3.
+    
+    Args:
+        pdf_bytes: Raw PDF content as bytes
+        bucket: Name of the S3 bucket
+        key: S3 object key/path for the PDF
+        
+    Uses AWS credentials from environment variables.
+    Defaults to us-east-1 region if not specified.
+    """
     s3 = boto3.client(
         "s3",
         aws_access_key_id=os.environ["MY_AWS_ACCESS_KEY_ID"],
@@ -63,6 +137,23 @@ def upload_pdf(pdf_bytes, bucket, key):
     s3.put_object(Bucket=bucket, Key=key, Body=pdf_bytes)
 
 def process_webhook(event):
+    """
+    Main webhook processing function.
+    
+    Handles both verification requests and actual webhook events:
+    - GET requests with 'msg' parameter are verification requests
+    - POST requests contain actual webhook payloads
+    
+    Args:
+        event: Dictionary containing request details:
+            - httpMethod: GET or POST
+            - headers: Request headers
+            - body: Request body
+            - queryStringParameters: URL query parameters
+            
+    Returns:
+        dict: Response containing statusCode and body
+    """
     method = event.get("httpMethod", "GET")
     headers = event.get("headers", {})
     body = event.get("body", "").encode()
