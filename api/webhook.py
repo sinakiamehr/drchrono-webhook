@@ -88,17 +88,14 @@ def verify_drchrono_signature(request, secret):
 def handler(event, context):
     import json
     
-    class Request:
-        def __init__(self, event):
-            self.method = event.get('httpMethod', 'GET')
-            self.headers = event.get('headers', {})
-            self.body = event.get('body', '').encode()
-            try:
-                self.json = json.loads(event.get('body', '{}'))
-            except json.JSONDecodeError:
-                self.json = {}
-    
-    request = Request(event)
+    # Parse event directly without Request class
+    method = event.get('httpMethod', 'GET')
+    headers = event.get('headers', {})
+    body = event.get('body', '').encode()
+    try:
+        request_json = json.loads(event.get('body', '{}'))
+    except json.JSONDecodeError:
+        request_json = {}
     PROVIDER_STRING = os.environ.get("PROVIDER_STRING")
     S3_BUCKET = os.environ.get("S3_BUCKET")
     AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
@@ -107,16 +104,16 @@ def handler(event, context):
     S3_FOLDER = "chrono-webhook"
     WEBHOOK_SECRET = os.environ.get("DRCHRONO_WEBHOOK_SECRET")
     
-    if request.method == "GET":
+    if method == "GET":
         return {"statusCode": 200, "body": "Webhook is live!"}
-    if request.method != "POST":
-        return {"statusCode": 405, "body": "Only POST allowed"}
+    if method != "POST":
+        return {"statusCode":405,"body":"Only POST allowed"}
 
     # Verify DrChrono webhook signature
-    if not verify_drchrono_signature(request, WEBHOOK_SECRET):
+    if not verify_drchrono_signature({"headers": headers, "body": body, "json": request_json}, WEBHOOK_SECRET):
         return {"statusCode": 401, "body": json.dumps({"error": "Invalid signature"})}
 
-    data = request.json
+    data = request_json
     note_id = data.get("id") or data.get("clinical_note") or data.get("object_id")
     if not note_id:
         return {"statusCode": 400, "body": json.dumps({"error": "No note ID in webhook payload"})}
