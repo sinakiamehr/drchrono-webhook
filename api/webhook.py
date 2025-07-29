@@ -174,6 +174,13 @@ def handler(request, response):
     ).hexdigest()
 
     if not hmac.compare_digest(computed, signature):
+        # For debugging, print the values (remove in production)
+        print("Signature mismatch.")
+        print("Received signature:", signature)
+        print("Computed signature:", computed)
+        print("Body (bytes):", body)
+        print("Secret (first 8):", secret[:8])
         return response.status(401).send("Signature mismatch.")
 
     return response.status(200).send("Signature OK")
+
