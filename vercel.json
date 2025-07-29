@@ -3,7 +3,7 @@
   "builds": [
     {
       "src": "api/webhook.py",
-      "use": "python@3.9",
+      "use": "@vercel/python",
       "config": {
         "maxLambdaSize": "15mb"
       }
