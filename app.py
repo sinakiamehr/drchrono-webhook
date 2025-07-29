@@ -1,29 +1,19 @@
-# local_webhook.py
+# app.py
 
 from flask import Flask, request
-from webhook_handler import process_webhook
 
 app = Flask(__name__)
 
-@app.route("/api/webhook", methods=["GET", "POST"])
+@app.route("/", methods=["GET", "POST"])
 def webhook():
-    # For GET, pass the query string for verification
-    event = {
-        "httpMethod": request.method,
-        "headers": dict(request.headers),
-        "body": request.data.decode("utf-8"),
-        "queryStringParameters": dict(request.args) if request.args else {},
-        "queryString": request.query_string.decode("utf-8") if request.query_string else ""
-    }
-    result = process_webhook(event)
-    # For DrChrono verification, always return application/json if GET and msg present
-    if request.method == "GET" and "msg" in request.args:
-        return (result["body"], result["statusCode"], {"Content-Type": "application/json"})
-    # If the body is empty, return plain text (for POST verification event)
-    if result["body"] == "":
-        return ("", result["statusCode"], {"Content-Type": "text/plain"})
-    # For all other responses, default to JSON
-    return (result["body"], result["statusCode"], {"Content-Type": "application/json"})
+    if request.method == "GET":
+        # DrChrono verification: echo back the msg parameter
+        msg = request.args.get("msg")
+        if msg:
+            return msg, 200
+        return "Missing msg parameter", 400
+    # Handle POST requests (webhook events) here
+    return "OK", 200
 
 if __name__ == "__main__":
     app.run()
