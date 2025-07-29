@@ -21,3 +21,4 @@ Thumbs.db
 
 # Ignore matched PDFs (if not needed in repo)
 matched_pdfs/
+.vercel
