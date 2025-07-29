@@ -1,10 +1,4 @@
-"""
-Vercel Serverless Function: DrChrono Clinical Note Webhook Handler (with S3 upload to chrono-webhook/ folder)
-
-Receives POST requests from DrChrono when a clinical note is locked,
-fetches the note's PDF, checks for a provider string, and uploads the PDF to
-the 'chrono-webhook/' folder in the 'clinical-registry-bucket' S3 bucket if matched.
-"""
+# api/webhook.py
 
 import os
 import requests
@@ -13,9 +7,6 @@ from PyPDF2 import PdfReader
 from io import BytesIO
 
 def pdf_contains_provider(pdf_bytes, provider_string):
-    """
-    Checks if the first page of a PDF contains the provider identification string.
-    """
     try:
         reader = PdfReader(BytesIO(pdf_bytes))
         if len(reader.pages) == 0:
@@ -28,9 +19,6 @@ def pdf_contains_provider(pdf_bytes, provider_string):
         return False
 
 def upload_to_s3(pdf_bytes, bucket, key, aws_access_key_id, aws_secret_access_key, aws_region):
-    """
-    Uploads the PDF bytes to the specified S3 bucket and key.
-    """
     s3 = boto3.client(
         "s3",
         aws_access_key_id=aws_access_key_id,
@@ -40,16 +28,45 @@ def upload_to_s3(pdf_bytes, bucket, key, aws_access_key_id, aws_secret_access_ke
     s3.put_object(Bucket=bucket, Key=key, Body=pdf_bytes)
     print(f"✅ Uploaded to S3: s3://{bucket}/{key}")
 
-def handler(request):
+def refresh_access_token():
     """
-    Vercel serverless function entry point.
-    Handles POST requests from DrChrono webhooks, fetches note metadata and PDF,
-    checks for provider string, and uploads matching PDFs to S3.
+    Refreshes the DrChrono access token using the refresh token.
+    Returns the new access token, or raises an exception on failure.
     """
-    # DrChrono and provider config
+    token_url = "https://drchrono.com/o/token/"
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": os.environ["DRCHRONO_REFRESH_TOKEN"],
+        "client_id": os.environ["DRCHRONO_CLIENT_ID"],
+        "client_secret": os.environ["DRCHRONO_CLIENT_SECRET"],
+    }
+    resp = requests.post(token_url, data=data, timeout=30)
+    resp.raise_for_status()
+    new_token = resp.json()["access_token"]
+    # Optionally update the environment variable in memory for future requests
+    os.environ["DRCHRONO_ACCESS_TOKEN"] = new_token
+    print("🔄 Refreshed DrChrono access token.")
+    return new_token
+
+def fetch_note_metadata(note_id, access_token):
+    """
+    Fetches note metadata from DrChrono API, with automatic token refresh on 401.
+    """
     DRCHRONO_API_BASE = os.environ.get("DRCHRONO_API_BASE", "https://drchrono.com/api/")
-    DRCHRONO_ACCESS_TOKEN = os.environ.get("DRCHRONO_ACCESS_TOKEN")
-    PROVIDER_STRING = os.environ.get("PROVIDER_STRING", "Provider: Dr. Michael Stone")
+    url = f"{DRCHRONO_API_BASE}clinical_notes/{note_id}"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    resp = requests.get(url, headers=headers, timeout=30)
+    if resp.status_code == 401:
+        # Token expired, refresh and retry
+        new_token = refresh_access_token()
+        headers = {"Authorization": f"Bearer {new_token}"}
+        resp = requests.get(url, headers=headers, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
+
+def handler(request):
+    # DrChrono and provider config
+    PROVIDER_STRING = os.environ.get("PROVIDER_STRING", "Dr. Michael Stone")
 
     # S3 config
     S3_BUCKET = os.environ.get("S3_BUCKET", "clinical-registry-bucket")
@@ -67,12 +84,9 @@ def handler(request):
         return ({"error": "No note ID in webhook payload"}, 400)
 
     try:
-        # Fetch note metadata
-        url = f"{DRCHRONO_API_BASE}clinical_notes/{note_id}"
-        headers = {"Authorization": f"Bearer {DRCHRONO_ACCESS_TOKEN}"}
-        resp = requests.get(url, headers=headers, timeout=30)
-        resp.raise_for_status()
-        note = resp.json()
+        # Fetch note metadata (with auto token refresh)
+        access_token = os.environ.get("DRCHRONO_ACCESS_TOKEN")
+        note = fetch_note_metadata(note_id, access_token)
         pdf_url = note.get("pdf")
         if not pdf_url:
             return ({"status": "no_pdf"}, 200)
