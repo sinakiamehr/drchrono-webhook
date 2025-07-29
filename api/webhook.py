@@ -86,7 +86,6 @@ def verify_drchrono_signature(request, secret):
     return True
 
 def handler(event, context):
-    from http.server import BaseHTTPRequestHandler
     import json
     
     class Request:
