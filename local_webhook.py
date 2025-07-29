@@ -1,13 +1,12 @@
 # local_webhook.py
 
 from flask import Flask, request
-from webhook import process_webhook
+from webhook_handler import process_webhook
 
 app = Flask(__name__)
 
 @app.route("/api/webhook", methods=["GET", "POST"])
 def webhook():
-    # For GET, pass the query string for verification
     event = {
         "httpMethod": request.method,
         "headers": dict(request.headers),

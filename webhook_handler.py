@@ -87,7 +87,8 @@ def process_webhook(event):
             hashed = hmac.new(secret.encode(), msg.encode(), hashlib.sha256).hexdigest()
             return {"statusCode": 200, "body": json.dumps({"secret_token": hashed})}
         else:
-            return {"statusCode": 200, "body": "Webhook is live!"}
+            return {"statusCode": 400, "body": "Missing msg parameter"}
+
 
     if method != "POST":
         return {"statusCode": 405, "body": "Only POST allowed"}
