@@ -1,5 +1,5 @@
+Flask
 requests
-PyPDF2
 boto3
+PyPDF2
 python-dotenv
-flask

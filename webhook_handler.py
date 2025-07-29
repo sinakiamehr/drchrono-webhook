@@ -1,3 +1,5 @@
+# webhook_handler.py
+
 import os
 import requests
 import boto3
@@ -127,7 +129,3 @@ def process_webhook(event):
     except Exception as e:
         print(f"Error: {e}")
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
-
-# --- Vercel entrypoint ---
-def handler(event, context=None):
-    return process_webhook(event)
