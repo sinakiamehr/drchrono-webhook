@@ -93,7 +93,9 @@ def handler(request):
     AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
     S3_FOLDER = "chrono-webhook"
     WEBHOOK_SECRET = os.environ.get("DRCHRONO_WEBHOOK_SECRET")
-
+    
+    if request.method == "GET":
+        return ("Webhook is live!", 200)
     if request.method != "POST":
         return ("Only POST allowed", 405)
 
