@@ -2,6 +2,23 @@
 
 This application handles webhooks from DrChrono's EHR system, processes clinical notes, and stores relevant PDFs in AWS S3.
 
+---
+
+## Project Structure
+
+```
+drchrono-webhook/
+├── .env.example       # Template for environment variables
+├── .gitignore        # Git ignore rules
+├── LICENSE           # Proprietary license
+├── README.md         # Project documentation
+├── app.py            # Flask web application
+├── requirements.txt  # Python dependencies
+└── webhook_handler.py # Core business logic
+```
+
+---
+
 ## Files
 
 ### app.py
@@ -30,6 +47,8 @@ This application handles webhooks from DrChrono's EHR system, processes clinical
   - python-dotenv (environment variables)
   - gunicorn (production WSGI server)
 
+---
+
 ## Environment Variables
 Required `.env` variables:
 - `DRCHRONO_WEBHOOK_SECRET`: Webhook verification secret
@@ -39,24 +58,7 @@ Required `.env` variables:
 - AWS credentials (`MY_AWS_ACCESS_KEY_ID`, `MY_AWS_SECRET_ACCESS_KEY`)
 - `S3_BUCKET`: Target bucket for PDF storage
 
-## Deployment on Render
-1. Connect your GitHub repository to Render
-2. Set all required environment variables
-3. Specify `gunicorn app:app` as the start command
-4. The webhook URL will be `https://your-service.onrender.com/api/webhook`
-
-## Project Structure
-
-```
-drchrono-webhook/
-├── .env.example       # Template for environment variables
-├── .gitignore        # Git ignore rules
-├── LICENSE           # Proprietary license
-├── README.md         # Project documentation
-├── app.py            # Flask web application
-├── requirements.txt  # Python dependencies
-└── webhook_handler.py # Core business logic
-```
+---
 
 ## Security
 
@@ -64,6 +66,8 @@ drchrono-webhook/
 - IAM user has only `s3:PutObject` permission for the target folder
 - No sensitive credentials are committed to the repository
 - Webhook requests are verified using HMAC signatures
+
+---
 
 ## Setup & Deployment
 
@@ -78,6 +82,14 @@ drchrono-webhook/
 1. Copy `.env.example` to `.env` and fill in your credentials
 2. Set these same variables in your Render project dashboard
 
+### Deployment on Render
+1. Connect your GitHub repository to Render
+2. Set all required environment variables
+3. Specify `gunicorn app:app` as the start command
+4. The webhook URL will be `https://your-service.onrender.com/api/webhook`
+
+---
+
 ## Webhook Flow
 1. DrChrono sends POST request with signed payload
 2. App verifies signature using shared secret
@@ -88,11 +100,13 @@ drchrono-webhook/
    - If match found, uploads to S3
 4. Returns JSON response with status
 
-## Verification
+### Verification
 
 DrChrono requires GET verification with `msg` parameter:
 - Returns HMAC-SHA256 of msg using webhook secret
 - Required for initial webhook setup
+
+---
 
 ## License
 
