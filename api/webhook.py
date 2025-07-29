@@ -85,7 +85,21 @@ def verify_drchrono_signature(request, secret):
         return False
     return True
 
-def handler(request):
+def handler(event, context):
+    from http.server import BaseHTTPRequestHandler
+    import json
+    
+    class Request:
+        def __init__(self, event):
+            self.method = event.get('httpMethod', 'GET')
+            self.headers = event.get('headers', {})
+            self.body = event.get('body', '').encode()
+            try:
+                self.json = json.loads(event.get('body', '{}'))
+            except json.JSONDecodeError:
+                self.json = {}
+    
+    request = Request(event)
     PROVIDER_STRING = os.environ.get("PROVIDER_STRING")
     S3_BUCKET = os.environ.get("S3_BUCKET")
     AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
@@ -95,25 +109,25 @@ def handler(request):
     WEBHOOK_SECRET = os.environ.get("DRCHRONO_WEBHOOK_SECRET")
     
     if request.method == "GET":
-        return ("Webhook is live!", 200)
+        return {"statusCode": 200, "body": "Webhook is live!"}
     if request.method != "POST":
-        return ("Only POST allowed", 405)
+        return {"statusCode": 405, "body": "Only POST allowed"}
 
     # Verify DrChrono webhook signature
     if not verify_drchrono_signature(request, WEBHOOK_SECRET):
-        return ({"error": "Invalid signature"}, 401)
+        return {"statusCode": 401, "body": json.dumps({"error": "Invalid signature"})}
 
     data = request.json
     note_id = data.get("id") or data.get("clinical_note") or data.get("object_id")
     if not note_id:
-        return ({"error": "No note ID in webhook payload"}, 400)
+        return {"statusCode": 400, "body": json.dumps({"error": "No note ID in webhook payload"})}
 
     try:
         access_token = os.environ.get("DRCHRONO_ACCESS_TOKEN")
         note = fetch_note_metadata(note_id, access_token)
         pdf_url = note.get("pdf")
         if not pdf_url:
-            return ({"status": "no_pdf"}, 200)
+            return {"statusCode": 200, "body": json.dumps({"status": "no_pdf"})}
 
         resp = requests.get(pdf_url, timeout=30)
         resp.raise_for_status()
@@ -129,10 +143,10 @@ def handler(request):
                 AWS_SECRET_ACCESS_KEY,
                 AWS_REGION,
             )
-            return ({"status": "uploaded", "s3_key": s3_key}, 200)
+            return {"statusCode": 200, "body": json.dumps({"status": "uploaded", "s3_key": s3_key})}
         else:
-            return ({"status": "provider_not_found"}, 200)
+            return {"statusCode": 200, "body": json.dumps({"status": "provider_not_found"})}
 
     except Exception as e:
         print(f"Error processing note: {e}")
-        return ({"error": str(e)}, 500)
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
