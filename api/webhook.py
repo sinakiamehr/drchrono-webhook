@@ -160,15 +160,21 @@ import os
 import hmac
 import hashlib
 
+# api/webhook.py
+
+import os
+import hmac
+import hashlib
+
 def handler(request, response):
-    # Vercel passes the request as an object with .body and .headers
     secret = os.environ.get("DRCHRONO_WEBHOOK_SECRET", "changeme")
-    signature = request.headers.get("x-drchrono-signature")  # header keys are lowercased in Vercel
+    signature = request.headers.get("x-drchrono-signature")
     if not signature:
         return response.status(401).send("No signature header found.")
 
-    # Vercel provides the raw body as bytes
-    body = request.body if isinstance(request.body, bytes) else request.body.encode()
+    # request.body is bytes
+    body = request.body
+
     computed = hmac.new(
         secret.encode(),
         body,
@@ -176,6 +182,12 @@ def handler(request, response):
     ).hexdigest()
 
     if not hmac.compare_digest(computed, signature):
+        print("Signature mismatch.")
+        print("Received signature:", signature)
+        print("Computed signature:", computed)
+        print("Body (bytes):", body)
+        print("Secret (first 8):", secret[:8])
         return response.status(401).send("Signature mismatch.")
 
     return response.status(200).send("Signature OK")
+
