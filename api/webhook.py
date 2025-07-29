@@ -1,5 +1,3 @@
-# webhook_handler.py
-
 import os
 import requests
 import boto3
@@ -74,12 +72,10 @@ def process_webhook(event):
     if method == "GET":
         # DrChrono sends a GET with a 'msg' parameter for verification
         msg = None
-        # Try to get msg from event (Flask passes it in queryStringParameters)
         if "queryStringParameters" in event and event["queryStringParameters"]:
             msg = event["queryStringParameters"].get("msg")
             if isinstance(msg, list):
                 msg = msg[0]
-        # Fallback: parse query string if necessary
         elif "queryString" in event and event["queryString"]:
             from urllib.parse import parse_qs
             parsed = parse_qs(event["queryString"])
@@ -89,7 +85,6 @@ def process_webhook(event):
             hashed = hmac.new(secret.encode(), msg.encode(), hashlib.sha256).hexdigest()
             return {"statusCode": 200, "body": json.dumps({"secret_token": hashed})}
         else:
-            # If no msg, just show live status
             return {"statusCode": 200, "body": "Webhook is live!"}
 
     if method != "POST":
@@ -132,3 +127,7 @@ def process_webhook(event):
     except Exception as e:
         print(f"Error: {e}")
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
+
+# --- Vercel entrypoint ---
+def handler(event, context=None):
+    return process_webhook(event)
