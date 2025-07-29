@@ -85,10 +85,11 @@ def verify_drchrono_signature(request, secret):
         return False
     return True
 
-def handler(event, context):
+def handler(event, context=None):
+    """Vercel-compatible standalone handler function"""
     import json
     
-    # Parse event directly without Request class
+    # Parse event with no HTTP handler dependencies
     method = event.get('httpMethod', 'GET')
     headers = event.get('headers', {})
     body = event.get('body', '').encode()
