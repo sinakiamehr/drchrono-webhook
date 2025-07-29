@@ -14,7 +14,7 @@ All sensitive credentials are managed via environment variables, and the AWS IAM
 
 ## Relationship to Clinical Registry Automation
 
-This webhook service is designed as a secure, cloud-native intake point for the broader [clinical_registry_automation](../clinical_registry_automation) project. By capturing and storing relevant clinical note PDFs in real time, it provides a reliable data source for downstream automation, NLP, and structured data extraction workflows managed in the main project.
+This webhook service is designed as a secure, cloud-native intake point for the broader CRA project. By capturing and storing relevant clinical note PDFs in real time, it provides a reliable data source for downstream automation, structured data extraction workflows managed in the main project.
 
 ## Project Structure
 
