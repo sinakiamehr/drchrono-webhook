@@ -1,8 +1,19 @@
 # api/webhook.py
 
+"""
+DrChrono Webhook PDF Uploader (Vercel Serverless Function)
+Production endpoint: https://drchrono-webhook.vercel.app/api/webhook
+
+- Verifies DrChrono webhook signature using a shared secret.
+- Fetches clinical note PDF, checks provider string, uploads to S3.
+- Automatically refreshes DrChrono access token if expired.
+"""
+
 import os
 import requests
 import boto3
+import hmac
+import hashlib
 from PyPDF2 import PdfReader
 from io import BytesIO
 
@@ -29,10 +40,6 @@ def upload_to_s3(pdf_bytes, bucket, key, aws_access_key_id, aws_secret_access_ke
     print(f"✅ Uploaded to S3: s3://{bucket}/{key}")
 
 def refresh_access_token():
-    """
-    Refreshes the DrChrono access token using the refresh token.
-    Returns the new access token, or raises an exception on failure.
-    """
     token_url = "https://drchrono.com/o/token/"
     data = {
         "grant_type": "refresh_token",
@@ -43,40 +50,56 @@ def refresh_access_token():
     resp = requests.post(token_url, data=data, timeout=30)
     resp.raise_for_status()
     new_token = resp.json()["access_token"]
-    # Optionally update the environment variable in memory for future requests
     os.environ["DRCHRONO_ACCESS_TOKEN"] = new_token
     print("🔄 Refreshed DrChrono access token.")
     return new_token
 
 def fetch_note_metadata(note_id, access_token):
-    """
-    Fetches note metadata from DrChrono API, with automatic token refresh on 401.
-    """
     DRCHRONO_API_BASE = os.environ.get("DRCHRONO_API_BASE", "https://drchrono.com/api/")
     url = f"{DRCHRONO_API_BASE}clinical_notes/{note_id}"
     headers = {"Authorization": f"Bearer {access_token}"}
     resp = requests.get(url, headers=headers, timeout=30)
     if resp.status_code == 401:
-        # Token expired, refresh and retry
         new_token = refresh_access_token()
         headers = {"Authorization": f"Bearer {new_token}"}
         resp = requests.get(url, headers=headers, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
-def handler(request):
-    # DrChrono and provider config
-    PROVIDER_STRING = os.environ.get("PROVIDER_STRING", "Dr. Michael Stone")
+def verify_drchrono_signature(request, secret):
+    """
+    Verifies the HMAC SHA256 signature of the request body using the shared secret.
+    Assumes DrChrono sends the signature in the 'X-Drchrono-Signature' header.
+    """
+    signature = request.headers.get("X-Drchrono-Signature")
+    if not signature:
+        print("❌ No signature header found.")
+        return False
+    computed = hmac.new(
+        secret.encode(),
+        request.body,  # raw bytes of the request body
+        hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(computed, signature):
+        print("❌ Signature mismatch.")
+        return False
+    return True
 
-    # S3 config
-    S3_BUCKET = os.environ.get("S3_BUCKET", "clinical-registry-bucket")
+def handler(request):
+    PROVIDER_STRING = os.environ.get("PROVIDER_STRING")
+    S3_BUCKET = os.environ.get("S3_BUCKET")
     AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
     AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
     AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
     S3_FOLDER = "chrono-webhook"
+    WEBHOOK_SECRET = os.environ.get("DRCHRONO_WEBHOOK_SECRET")
 
     if request.method != "POST":
         return ("Only POST allowed", 405)
+
+    # Verify DrChrono webhook signature
+    if not verify_drchrono_signature(request, WEBHOOK_SECRET):
+        return ({"error": "Invalid signature"}, 401)
 
     data = request.json
     note_id = data.get("id") or data.get("clinical_note") or data.get("object_id")
@@ -84,19 +107,16 @@ def handler(request):
         return ({"error": "No note ID in webhook payload"}, 400)
 
     try:
-        # Fetch note metadata (with auto token refresh)
         access_token = os.environ.get("DRCHRONO_ACCESS_TOKEN")
         note = fetch_note_metadata(note_id, access_token)
         pdf_url = note.get("pdf")
         if not pdf_url:
             return ({"status": "no_pdf"}, 200)
 
-        # Download PDF
         resp = requests.get(pdf_url, timeout=30)
         resp.raise_for_status()
         pdf_bytes = resp.content
 
-        # Check provider string
         if pdf_contains_provider(pdf_bytes, PROVIDER_STRING):
             s3_key = f"{S3_FOLDER}/note_{note_id}.pdf"
             upload_to_s3(
