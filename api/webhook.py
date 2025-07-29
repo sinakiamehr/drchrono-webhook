@@ -66,21 +66,23 @@ def fetch_note_metadata(note_id, access_token):
     resp.raise_for_status()
     return resp.json()
 
+# Module-level constants
+DRCHRONO_WEBHOOK_SECRET = os.environ.get("DRCHRONO_WEBHOOK_SECRET")
+
 def verify_drchrono_signature(request, secret):
     """
     Verifies the HMAC SHA256 signature of the request body using the shared secret.
     Assumes DrChrono sends the signature in the 'X-Drchrono-Signature' header.
     """
-    # Add this at the start of verify_drchrono_signature function
-    if not DRCHRONO_WEBHOOK_SECRET:
-        raise ValueError("WEBHOOK_SECRET environment variable not set")
+    if not secret:
+        raise ValueError("DRCHRONO_WEBHOOK_SECRET environment variable not set")
     signature = request["headers"].get("X-Drchrono-Signature")
     if not signature:
         print("❌ No signature header found.")
         return False
     computed = hmac.new(
         secret.encode(),
-        request.body,  # raw bytes of the request body
+        request["body"],  # raw bytes of the request body
         hashlib.sha256
     ).hexdigest()
     if not hmac.compare_digest(computed, signature):
@@ -106,7 +108,6 @@ def handler(event, context=None):
     AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
     AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
     S3_FOLDER = "chrono-webhook"
-    WEBHOOK_SECRET = os.environ.get("DRCHRONO_WEBHOOK_SECRET")
     
     if method == "GET":
         return {"statusCode": 200, "body": "Webhook is live!"}
